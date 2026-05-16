@@ -81,7 +81,7 @@ func TestGenerateCommand(t *testing.T) {
 			setupArgs: func(t *testing.T) []string {
 				return []string{"generate", "--config", filepath.Join(t.TempDir(), "nonexistent.yaml")}
 			},
-			wantErr: "open manifest",
+			wantErr: "open blueprint",
 		},
 		{
 			name: "malformed YAML",
@@ -90,7 +90,7 @@ func TestGenerateCommand(t *testing.T) {
 				require.NoError(t, os.WriteFile(path, []byte("not: valid: yaml: ["), 0644))
 				return []string{"generate", "--config", path}
 			},
-			wantErr: "parse manifest",
+			wantErr: "parse blueprint",
 		},
 		{
 			name: "missing required fields",

@@ -1,0 +1,167 @@
+{
+  "nextId": 11,
+  "tasks": [
+    {
+      "id": "1",
+      "subject": "Task 1: Define conduit.Conduit interface",
+      "description": "Add Conduit interface with Run(ctx context.Context) error to conduit/conduit.go. Update conduit/conduit_test.go with compile-time assertions (will be satisfied after Tasks 3 & 4). Validation: go test ./conduit/... passes.",
+      "status": "completed",
+      "activeForm": "Defining conduit.Conduit interface",
+      "metadata": {},
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1778866948209,
+      "updatedAt": 1778925377436
+    },
+    {
+      "id": "2",
+      "subject": "Task 2: Create agent/ orchestration package",
+      "description": "Implement agent.Agent that holds session.Manager and []conduit.Conduit. Exposes New(mgr), Add(c), Run(ctx). Start conduits concurrently in goroutines, block until ctx cancellation or any error. Validation: go test ./agent/... passes with mock conduits.",
+      "status": "pending",
+      "activeForm": "Creating agent/ orchestration package",
+      "metadata": {
+        "depends_on": [
+          "1"
+        ]
+      },
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1778866948211,
+      "updatedAt": 1778866948211
+    },
+    {
+      "id": "3",
+      "subject": "Task 3: Refactor HTTP handler for Conduit interface",
+      "description": "Rename NewHandler→New, add WithPort(port string) Option, implement Run(ctx context.Context) error on Handler. Move http.Server creation into Run. Update examples/http-chat/main.go to use agent pattern. Validation: go test ./conduit/http/... passes; go build ./examples/http-chat succeeds.",
+      "status": "pending",
+      "activeForm": "Refactoring HTTP handler for Conduit interface",
+      "metadata": {
+        "depends_on": [
+          "1"
+        ]
+      },
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1778866948212,
+      "updatedAt": 1778866948212
+    },
+    {
+      "id": "4",
+      "subject": "Task 4: Refactor TUI for Conduit interface",
+      "description": "Change New(sess)→New(mgr, opts...), add WithThreadID(id string) Option, implement Run(ctx context.Context) error. Create/attach session inside Run. Add ctx.Done()→tea.Quit() goroutine. Update examples/tui-chat/main.go. Validation: go test ./conduit/tui/... passes; go build ./examples/tui-chat succeeds.",
+      "status": "pending",
+      "activeForm": "Refactoring TUI for Conduit interface",
+      "metadata": {
+        "depends_on": [
+          "1"
+        ]
+      },
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1778866948213,
+      "updatedAt": 1778866948213
+    },
+    {
+      "id": "5",
+      "subject": "Task 5: Rename Manifest to Blueprint and extend for multi-conduit",
+      "description": "Rename Manifest→Blueprint, ParseManifest→ParseBlueprint. Replace single conduit field with Conduits []ConduitConfig (module, options). Rename files manifest.go→blueprint.go, manifest_test.go→blueprint_test.go. Update all forge code and tests. Change default config to blueprint.yaml. Validation: go test ./cmd/forge/... passes.",
+      "status": "in_progress",
+      "activeForm": "Renaming Manifest to Blueprint and extending format",
+      "metadata": {},
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1778866948214,
+      "updatedAt": 1778925395750
+    },
+    {
+      "id": "6",
+      "subject": "Task 6: Rewrite main.go.tmpl for multi-conduit agent pattern",
+      "description": "Rewrite template to generate dynamic imports, agent.New(mgr), loop over conduits calling New(mgr, opts...), agent.Run(ctx). Update GenerateMainGo signature and test expectations. Built-in conduits get hardcoded option translation. Validation: go test ./cmd/forge/... passes.",
+      "status": "pending",
+      "activeForm": "Rewriting main.go.tmpl for multi-conduit agent pattern",
+      "metadata": {
+        "depends_on": [
+          "2",
+          "3",
+          "4",
+          "5"
+        ]
+      },
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1778866948214,
+      "updatedAt": 1778866948214
+    },
+    {
+      "id": "7",
+      "subject": "Task 7: Support go get resolution for external conduit modules",
+      "description": "Update Build function to run go get for each non-local conduit module before go mod tidy. Update go.mod.tmpl if needed. Validation: go test ./cmd/forge/... passes; smoke tests pass.",
+      "status": "pending",
+      "activeForm": "Supporting go get for external conduit modules",
+      "metadata": {
+        "depends_on": [
+          "5"
+        ]
+      },
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1778866948215,
+      "updatedAt": 1778866948215
+    },
+    {
+      "id": "8",
+      "subject": "Task 8: Update testdata and example manifests to new blueprint format",
+      "description": "Convert all forge.yaml files to multi-conduit blueprint.yaml format with conduits: list. Update smoke test paths if filenames change. Optional: add multi-conduit example. Validation: go test ./cmd/forge/... passes.",
+      "status": "pending",
+      "activeForm": "Updating testdata and example manifests",
+      "metadata": {
+        "depends_on": [
+          "3",
+          "4",
+          "5"
+        ]
+      },
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1778866948216,
+      "updatedAt": 1778866948216
+    },
+    {
+      "id": "9",
+      "subject": "Task 9: Update example applications to demonstrate agent pattern",
+      "description": "Rewrite examples/http-chat/main.go and examples/tui-chat/main.go to construct session.Manager, agent.New(mgr), add conduit, agent.Run(ctx). Validation: go build ./examples/http-chat and go build ./examples/tui-chat succeed.",
+      "status": "pending",
+      "activeForm": "Updating example applications to agent pattern",
+      "metadata": {
+        "depends_on": [
+          "2",
+          "3",
+          "4"
+        ]
+      },
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1778866948217,
+      "updatedAt": 1778866948217
+    },
+    {
+      "id": "10",
+      "subject": "Task 10: Full integration validation",
+      "description": "Run go test -race ./..., go build ./..., go vet ./.... Fix any races in agent.Agent. Ensure smoke tests and all examples compile.",
+      "status": "pending",
+      "activeForm": "Running full integration validation",
+      "metadata": {
+        "depends_on": [
+          "6",
+          "7",
+          "8",
+          "9"
+        ]
+      },
+      "blocks": [],
+      "blockedBy": [],
+      "createdAt": 1778866948218,
+      "updatedAt": 1778866948218
+    }
+  ]
+}

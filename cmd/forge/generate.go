@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 )
 
@@ -18,8 +19,8 @@ var mainGoTmpl string
 var goModTmpl string
 
 // GenerateMainGo produces a compilable main.go for the conduit specified
-// in manifest.
-func GenerateMainGo(manifest *Manifest) ([]byte, error) {
+// in blueprint.
+func GenerateMainGo(blueprint *Blueprint) ([]byte, error) {
 	tmpl, err := template.New("main").Parse(mainGoTmpl)
 	if err != nil {
 		return nil, fmt.Errorf("parse main.go template: %w", err)
@@ -29,7 +30,7 @@ func GenerateMainGo(manifest *Manifest) ([]byte, error) {
 	data := struct {
 		ConduitType string
 	}{
-		ConduitType: manifest.Conduit.Type,
+		ConduitType: deriveConduitType(blueprint),
 	}
 
 	if err := tmpl.Execute(&buf, data); err != nil {
@@ -45,9 +46,26 @@ func GenerateMainGo(manifest *Manifest) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// deriveConduitType extracts a legacy conduit type identifier from the first
+// conduit module path. This is a temporary bridge until the template is fully
+// rewritten for multi-conduit agent generation (Task 6).
+func deriveConduitType(blueprint *Blueprint) string {
+	if len(blueprint.Conduits) == 0 {
+		return ""
+	}
+	module := blueprint.Conduits[0].Module
+	if strings.HasSuffix(module, "/conduit/http") {
+		return "http"
+	}
+	if strings.HasSuffix(module, "/conduit/tui") {
+		return "tui"
+	}
+	return ""
+}
+
 // Generate writes main.go and go.mod into targetDir.
-func Generate(manifest *Manifest, oreModulePath string, targetDir string) error {
-	mainGo, err := GenerateMainGo(manifest)
+func Generate(blueprint *Blueprint, oreModulePath string, targetDir string) error {
+	mainGo, err := GenerateMainGo(blueprint)
 	if err != nil {
 		return fmt.Errorf("generate main.go: %w", err)
 	}
@@ -55,7 +73,7 @@ func Generate(manifest *Manifest, oreModulePath string, targetDir string) error 
 		return fmt.Errorf("write main.go: %w", err)
 	}
 
-	goMod, err := GenerateGoMod(manifest, oreModulePath)
+	goMod, err := GenerateGoMod(blueprint, oreModulePath)
 	if err != nil {
 		return fmt.Errorf("generate go.mod: %w", err)
 	}
@@ -68,7 +86,7 @@ func Generate(manifest *Manifest, oreModulePath string, targetDir string) error 
 
 // GenerateGoMod produces a go.mod that depends on the local ore module via
 // a replace directive.
-func GenerateGoMod(manifest *Manifest, oreModulePath string) ([]byte, error) {
+func GenerateGoMod(blueprint *Blueprint, oreModulePath string) ([]byte, error) {
 	tmpl, err := template.New("gomod").Parse(goModTmpl)
 	if err != nil {
 		return nil, fmt.Errorf("parse go.mod template: %w", err)
@@ -79,7 +97,7 @@ func GenerateGoMod(manifest *Manifest, oreModulePath string) ([]byte, error) {
 		ModuleName    string
 		OreModulePath string
 	}{
-		ModuleName:    manifest.Dist.Name,
+		ModuleName:    blueprint.Dist.Name,
 		OreModulePath: oreModulePath,
 	}
 
