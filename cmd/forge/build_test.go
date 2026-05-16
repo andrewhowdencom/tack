@@ -52,6 +52,30 @@ func TestBuild(t *testing.T) {
 	}
 }
 
+func TestOreModuleName(t *testing.T) {
+	t.Run("valid go.mod", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module github.com/test/module\n\ngo 1.26.2\n"), 0644))
+
+		name, err := oreModuleName(dir)
+		require.NoError(t, err)
+		assert.Equal(t, "github.com/test/module", name)
+	})
+
+	t.Run("missing go.mod", func(t *testing.T) {
+		_, err := oreModuleName(t.TempDir())
+		require.Error(t, err)
+	})
+
+	t.Run("no module declaration", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("go 1.26.2\n"), 0644))
+
+		_, err := oreModuleName(dir)
+		require.Error(t, err)
+	})
+}
+
 func TestBuild_RelativeOutputPath(t *testing.T) {
 	oreModulePath, err := FindOreModuleRoot(".")
 	require.NoError(t, err)
