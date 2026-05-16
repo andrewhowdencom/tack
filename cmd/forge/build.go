@@ -26,8 +26,11 @@ func oreModuleName(modulePath string) (string, error) {
 	return "", fmt.Errorf("no module declaration found in %s", modulePath)
 }
 
-// Build generates a temporary Go module from blueprint, runs go mod tidy,
-// and compiles a binary at outputPath using the local ore module.
+// Build generates a temporary Go module from blueprint, resolves external
+// conduit dependencies via go get, runs go mod tidy, and compiles a binary
+// at outputPath. The generated main.go constructs an ore.Agent, registers
+// each conduit defined in the manifest, and runs them concurrently under
+// a shared session manager.
 // If outputPath is relative it is resolved against the current working
 // directory before compilation.
 func Build(blueprint *Blueprint, oreModulePath string, outputPath string) error {

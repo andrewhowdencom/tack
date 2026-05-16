@@ -88,8 +88,9 @@ func prepareConduitData(blueprint *Blueprint) []conduitData {
 	return result
 }
 
-// GenerateMainGo produces a compilable main.go for the conduit specified
-// in blueprint.
+// GenerateMainGo produces a compilable main.go from the blueprint. The
+// generated code constructs an ore.Agent, registers each conduit with
+// translated functional options, and runs them concurrently.
 func GenerateMainGo(blueprint *Blueprint) ([]byte, error) {
 	tmpl, err := template.New("main").Parse(mainGoTmpl)
 	if err != nil {

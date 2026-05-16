@@ -147,14 +147,26 @@ An I/O Conduit can be:
 
 A Conduit's contract with the application layer is about **ingress events** and **egress actions**, not about rendering chat windows.
 
-The framework defines a `conduit.Conduit` interface with four egress actions and one ingress source:
+All conduits implement the `conduit.Conduit` interface:
 
-- `Events() <-chan Event` — read-only channel of user-generated events (`UserMessageEvent`, `InterruptEvent`, etc.)
-- `RenderDelta(ctx, artifact.Artifact) error` — render an ephemeral delta artifact incrementally (e.g., `TextDelta` chunks)
-- `RenderTurn(ctx, state.Turn) error` — render a complete turn that has been appended to state
-- `SetStatus(ctx, string) error` — update a transient status indicator (e.g., "thinking...", "calling tool...")
+```go
+type Conduit interface {
+    Run(ctx context.Context) error
+}
+```
 
-Implementations (TUI, web, Telegram, etc.) satisfy this interface at build time. The framework does not assume any specific rendering mechanism.
+A conduit internally manages its own event loop, ingress sources, and egress rendering. It communicates with the application layer (typically via a `session.Manager`) to read events and render assistant responses.
+
+Applications can run multiple conduits concurrently via the `agent/` package:
+
+```go
+a := agent.New(mgr)
+a.Add(http.New(mgr, http.WithPort("8080"), http.WithUI()))
+a.Add(tui.New(mgr, tui.WithThreadID("abc-123")))
+a.Run(ctx)
+```
+
+The agent blocks until the context is cancelled or any conduit returns an error.
 
 ### Threads
 
@@ -179,7 +191,7 @@ Above the Loop / Step, the framework separates concerns into three layers:
 
 - **`loop.Step`** — the transform layer. Executes one complete inference turn: invokes the provider, optionally emits streaming deltas as `OutputEvent` to a configured channel, and runs registered artifact handlers synchronously on the complete response. Handlers may mutate state (e.g., append `RoleTool` turns with tool results).
 - **`cognitive.ReAct`** — a pure cognitive pattern that implements the ReAct feedback loop. It repeatedly calls `Step.Turn()`, inspects the resulting state, and loops again if the last turn is not from the assistant (indicating pending tool results). It is conduit-agnostic and stateless — it receives `state.State` as a parameter and returns it.
-- **Application-layer IO wiring** — the application (typically in `main()`) owns the `Conduit`, reads `Conduit.Events()`, appends user messages to state, invokes the cognitive pattern, subscribes to `Step`'s output events to route delta and turn events back to the conduit, and manages status and interrupts.
+- **Application-layer IO wiring** — the application (typically in `main()`) creates one or more conduits, optionally wraps them in an `agent.Agent` for concurrent execution, and starts them with `Run(ctx)`. Each conduit internally manages its own event loop and communicates with a shared `session.Manager`.
 
 This three-layer separation means single-turn applications can use `Step` directly, multi-turn agents compose `Step` with `cognitive.ReAct`, and the application layer handles all conduit-specific concerns.
 
@@ -228,7 +240,8 @@ This README remains a vision document, but the framework is now partially implem
 - `loop/` — `Step` with `Turn()` method, `BeforeTurn` hook, optional streaming via `OutputEvent` channel, and artifact `Handler` interface for single-turn execution
 - `tool/` — `Registry` for mapping tool names to Go functions, and `Handler` implementing `loop.Handler` for tool execution
 - `cognitive/` — `ReAct` cognitive pattern for multi-turn looping, conduit-agnostic and stateless
-- `conduit/` — `Conduit` interface with ingress events and egress delta/turn/status rendering. The TUI conduit renders complete assistant turns as rich Markdown via `charmbracelet/glamour` (syntax-highlighted code blocks, headings, bold/italic). Custom embedded zero-margin themes maximize usable terminal height, and `Reasoning` artifacts are styled through the same Markdown pipeline. The viewport auto-scrolls to the bottom after each assistant turn so new content remains visible. While a response is pending, the TUI shows a static `Assistant:` / `...` placeholder; no streaming delta rendering is performed.
+- `conduit/` — `Conduit` interface (`Run(ctx context.Context) error`) for I/O frontends. The TUI conduit renders complete assistant turns as rich Markdown via `charmbracelet/glamour` (syntax-highlighted code blocks, headings, bold/italic). Custom embedded zero-margin themes maximize usable terminal height, and `Reasoning` artifacts are styled through the same Markdown pipeline. The viewport auto-scrolls to the bottom after each assistant turn so new content remains visible. While a response is pending, the TUI shows a static `Assistant:` / `...` placeholder; no streaming delta rendering is performed.
+- `agent/` — Multi-conduit orchestrator that runs concurrent conduits under a shared `session.Manager`. First error cancels remaining siblings and is returned to the caller.
 - `provider/openai/` — OpenAI-compatible adapter with streaming chat completions and tool calling support
 - `examples/single-turn-cli/` — Reference one-shot CLI application
 - `examples/tui-chat/` — Reference interactive chat REPL using Bubble Tea
@@ -283,8 +296,11 @@ The manifest is a single YAML file with three top-level sections:
 dist:
   name: my-agent          # binary name used in go.mod
   output_path: ./my-agent # destination path (relative to cwd)
-conduit:
-  type: http              # "http" or "tui"
+conduits:
+  - module: github.com/andrewhowdencom/ore/conduit/http
+    options:
+      port: "8080"        # optional, default "8080"
+      ui: true            # optional, serve built-in chat UI
 ```
 
 ### Generated binary
