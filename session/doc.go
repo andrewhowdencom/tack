@@ -26,9 +26,9 @@
 //	_ = sess.Process(ctx, conduit.UserMessageEvent{Content: "hello"})
 //
 //	// HTTP conduit composes with the Manager.
-//	handler := httpc.NewHandler(mgr, httpc.WithUI())
+//	h := http.New(mgr, http.WithUI())
 //
 //	// TUI conduit composes with a Session handle.
-//	t := tui.New(sess)
+//	t := tui.New(mgr)
 //
 package session

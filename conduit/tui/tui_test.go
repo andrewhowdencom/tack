@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/andrewhowdencom/ore/artifact"
+	"github.com/andrewhowdencom/ore/conduit"
 	"github.com/andrewhowdencom/ore/loop"
 	"github.com/andrewhowdencom/ore/provider"
 	"github.com/andrewhowdencom/ore/session"
@@ -12,6 +13,9 @@ import (
 	"github.com/andrewhowdencom/ore/thread"
 	"github.com/stretchr/testify/require"
 )
+
+// Compile-time assertion that TUI implements conduit.Conduit.
+var _ conduit.Conduit = (*TUI)(nil)
 
 // mockProvider is a provider.Provider implementation for testing.
 type mockProvider struct {
@@ -42,21 +46,6 @@ func TestNew(t *testing.T) {
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
 
-	sess, err := mgr.Create()
-	require.NoError(t, err)
-
-	tui := New(sess)
-	require.NotNil(t, tui)
-}
-
-func TestNew_Events(t *testing.T) {
-	store := thread.NewMemoryStore()
-	prov := &mockProvider{}
-	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-
-	sess, err := mgr.Create()
-	require.NoError(t, err)
-
-	tui := New(sess)
+	tui := New(mgr)
 	require.NotNil(t, tui)
 }

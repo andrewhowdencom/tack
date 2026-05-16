@@ -9,7 +9,7 @@
 //
 // Resume an existing thread:
 //
-//	go run ./examples/tui-chat --thread <uuid>
+//	ORE_THREAD_ID=<uuid> go run ./examples/tui-chat
 //
 // With persistent JSON store:
 //
@@ -17,10 +17,12 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/andrewhowdencom/ore/cognitive"
 	"github.com/andrewhowdencom/ore/conduit/tui"
@@ -41,11 +43,6 @@ func main() {
 }
 
 func run() error {
-	// Parse command-line flags.
-	var threadID string
-	flag.StringVar(&threadID, "thread", "", "existing thread UUID to resume")
-	flag.Parse()
-
 	// Environment configuration.
 	apiKey := os.Getenv("ORE_API_KEY")
 	if apiKey == "" {
@@ -86,31 +83,16 @@ func run() error {
 	// Create session manager with the ReAct cognitive pattern.
 	mgr := session.NewManager(store, prov, stepFactory, cognitive.NewTurnProcessor())
 
-	// Obtain a session — resume an existing thread or create a new one.
-	var sess session.Session
-	var err error
-	if threadID != "" {
-		sess, err = mgr.Attach(threadID)
-		if err != nil {
-			return fmt.Errorf("attach to thread %q: %w", threadID, err)
-		}
-	} else {
-		sess, err = mgr.Create()
-		if err != nil {
-			return fmt.Errorf("create session: %w", err)
-		}
-		slog.Info("thread started", "id", sess.ID())
-	}
+	// Create TUI conduit composed with the manager.
+	// WithThreadID is optional; omit it to create a new thread.
+	s := tui.New(mgr, tui.WithThreadID(os.Getenv("ORE_THREAD_ID")))
 
-	// Create TUI conduit composed with the session.
-	// The TUI manages its own subscription and event loop; do not call
-	// sess.Subscribe or sess.Process from application code.
-	s := tui.New(sess)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	// Run the TUI. This blocks until the user quits (Ctrl+C).
-	// s.Run() closes the events channel on return so background
-	// goroutines exit cleanly.
-	if err := s.Run(); err != nil {
+	// Run the TUI. This blocks until the user quits (Ctrl+C) or the context
+	// is cancelled.
+	if err := s.Run(ctx); err != nil {
 		return fmt.Errorf("tui exited: %w", err)
 	}
 

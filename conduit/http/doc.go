@@ -4,9 +4,11 @@
 //
 // API:
 //
-//	NewHandler(mgr, opts...)  - create a handler wired to a session.Manager
+//	New(mgr, opts...)        - create a handler wired to a session.Manager
+//	WithPort(port)            - set the TCP port (default: "8080")
 //	WithUI()                  - enable the built-in web UI (default: disabled)
 //	ServeMux()                - returns *http.ServeMux with all routes registered
+//	Run(ctx)                  - start the server and block until ctx is cancelled
 //
 // Routes:
 //   POST /sessions                    - create a new session (201)
