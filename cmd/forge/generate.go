@@ -18,6 +18,76 @@ var mainGoTmpl string
 //go:embed templates/go.mod.tmpl
 var goModTmpl string
 
+// conduitData holds per-conduit template parameters.
+type conduitData struct {
+	ModulePath  string
+	ImportAlias string
+	NewCall     string
+}
+
+// deriveImportAlias returns a unique import alias for the given module path.
+// If the last path segment is already in use, a numeric suffix is appended.
+func deriveImportAlias(modulePath string, used map[string]bool) string {
+	parts := strings.Split(modulePath, "/")
+	base := parts[len(parts)-1]
+
+	if !used[base] {
+		used[base] = true
+		return base
+	}
+
+	for i := 2; ; i++ {
+		candidate := fmt.Sprintf("%s%d", base, i)
+		if !used[candidate] {
+			used[candidate] = true
+			return candidate
+		}
+	}
+}
+
+// formatNewCall generates the Go expression for creating a conduit,
+// including typed functional options for built-in ore conduits.
+func formatNewCall(alias, modulePath string, options map[string]any) string {
+	var opts []string
+
+	switch modulePath {
+	case "github.com/andrewhowdencom/ore/conduit/http":
+		if port, ok := options["port"]; ok {
+			opts = append(opts, fmt.Sprintf(`%s.WithPort("%v")`, alias, port))
+		}
+		if ui, ok := options["ui"]; ok && ui == true {
+			opts = append(opts, fmt.Sprintf(`%s.WithUI()`, alias))
+		}
+	case "github.com/andrewhowdencom/ore/conduit/tui":
+		if thread, ok := options["thread"]; ok {
+			opts = append(opts, fmt.Sprintf(`%s.WithThreadID("%v")`, alias, thread))
+		}
+	}
+
+	if len(opts) > 0 {
+		return fmt.Sprintf(`%s.New(mgr, %s)`, alias, strings.Join(opts, ", "))
+	}
+	return fmt.Sprintf(`%s.New(mgr)`, alias)
+}
+
+// prepareConduitData converts blueprint conduit configs into template data.
+func prepareConduitData(blueprint *Blueprint) []conduitData {
+	used := make(map[string]bool)
+	var result []conduitData
+
+	for _, cfg := range blueprint.Conduits {
+		alias := deriveImportAlias(cfg.Module, used)
+		newCall := formatNewCall(alias, cfg.Module, cfg.Options)
+		result = append(result, conduitData{
+			ModulePath:  cfg.Module,
+			ImportAlias: alias,
+			NewCall:     newCall,
+		})
+	}
+
+	return result
+}
+
 // GenerateMainGo produces a compilable main.go for the conduit specified
 // in blueprint.
 func GenerateMainGo(blueprint *Blueprint) ([]byte, error) {
@@ -28,9 +98,9 @@ func GenerateMainGo(blueprint *Blueprint) ([]byte, error) {
 
 	var buf bytes.Buffer
 	data := struct {
-		ConduitType string
+		Conduits []conduitData
 	}{
-		ConduitType: deriveConduitType(blueprint),
+		Conduits: prepareConduitData(blueprint),
 	}
 
 	if err := tmpl.Execute(&buf, data); err != nil {
@@ -44,23 +114,6 @@ func GenerateMainGo(blueprint *Blueprint) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
-}
-
-// deriveConduitType extracts a legacy conduit type identifier from the first
-// conduit module path. This is a temporary bridge until the template is fully
-// rewritten for multi-conduit agent generation (Task 6).
-func deriveConduitType(blueprint *Blueprint) string {
-	if len(blueprint.Conduits) == 0 {
-		return ""
-	}
-	module := blueprint.Conduits[0].Module
-	if strings.HasSuffix(module, "/conduit/http") {
-		return "http"
-	}
-	if strings.HasSuffix(module, "/conduit/tui") {
-		return "tui"
-	}
-	return ""
 }
 
 // Generate writes main.go and go.mod into targetDir.
