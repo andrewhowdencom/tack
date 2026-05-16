@@ -70,8 +70,11 @@ func (h *Handler) Run(ctx context.Context) error {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
-		return ctx.Err()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+		<-errCh
+		return nil
 	case err := <-errCh:
 		if errors.Is(err, stdhttp.ErrServerClosed) {
 			return nil
