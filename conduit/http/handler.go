@@ -1,10 +1,12 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	stdhttp "net/http"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -18,6 +20,13 @@ import (
 // Option configures a Handler via functional options.
 type Option func(*Handler)
 
+// WithPort sets the TCP port for the HTTP server. The default is "8080".
+func WithPort(port string) Option {
+	return func(h *Handler) {
+		h.port = port
+	}
+}
+
 // WithUI enables serving of an embedded HTML/JS chat client at GET / and
 // GET /chat.js. When enabled, the handler registers these routes in ServeMux.
 func WithUI() Option {
@@ -30,16 +39,45 @@ func WithUI() Option {
 // primitives. It is mounted on an http.ServeMux via ServeMux().
 type Handler struct {
 	mgr    *session.Manager
+	port   string
 	withUI bool
 }
 
-// NewHandler creates a new Handler with the given session manager.
-func NewHandler(mgr *session.Manager, opts ...Option) *Handler {
-	h := &Handler{mgr: mgr}
+// New creates a new Handler with the given session manager.
+func New(mgr *session.Manager, opts ...Option) *Handler {
+	h := &Handler{mgr: mgr, port: "8080"}
 	for _, opt := range opts {
 		opt(h)
 	}
 	return h
+}
+
+// Run starts the HTTP server and blocks until the context is cancelled or
+// the server encounters a fatal error. It satisfies conduit.Conduit.
+func (h *Handler) Run(ctx context.Context) error {
+	server := &stdhttp.Server{
+		Addr:    ":" + h.port,
+		Handler: h.ServeMux(),
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		slog.Info("starting HTTP server", "addr", server.Addr)
+		errCh <- server.ListenAndServe()
+	}()
+
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+		return ctx.Err()
+	case err := <-errCh:
+		if errors.Is(err, stdhttp.ErrServerClosed) {
+			return nil
+		}
+		return err
+	}
 }
 
 // ServeMux returns an http.ServeMux with all HTTP conduit routes registered.

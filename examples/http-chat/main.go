@@ -52,19 +52,19 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 
 	"github.com/andrewhowdencom/ore/cognitive"
+	"github.com/andrewhowdencom/ore/conduit/http"
 	"github.com/andrewhowdencom/ore/loop"
 	"github.com/andrewhowdencom/ore/provider"
 	"github.com/andrewhowdencom/ore/provider/openai"
 	"github.com/andrewhowdencom/ore/session"
 	"github.com/andrewhowdencom/ore/thread"
 	"github.com/andrewhowdencom/ore/tool"
-
-	httpc "github.com/andrewhowdencom/ore/conduit/http"
 )
 
 func main() {
@@ -169,18 +169,14 @@ func run() error {
 	// Create the session manager with the ReAct cognitive pattern.
 	mgr := session.NewManager(threadStore, prov, stepFactory, cognitive.NewTurnProcessor())
 
-	// Create the HTTP conduit handler.
+	// Create the HTTP conduit.
 	// WithUI() is optional; omit it to serve only the API without the chat UI.
-	handler := httpc.NewHandler(mgr, httpc.WithUI())
+	h := http.New(mgr, http.WithPort(port), http.WithUI())
 
-	// Start the HTTP server.
-	server := &http.Server{
-		Addr:    ":" + port,
-		Handler: handler.ServeMux(),
-	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	slog.Info("starting HTTP server", "addr", server.Addr)
-	return server.ListenAndServe()
+	return h.Run(ctx)
 }
 
 // toFloat64 converts a JSON-decoded number (or string) to float64.

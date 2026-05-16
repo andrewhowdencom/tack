@@ -23,6 +23,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Compile-time assertion that Handler implements conduit.Conduit.
+var _ conduit.Conduit = (*Handler)(nil)
+
 // mockProvider is a provider.Provider implementation for testing that can be
 // configured to emit a sequence of artifacts, optionally returning an error.
 type mockProvider struct {
@@ -118,16 +121,17 @@ func TestNewHandler(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 	require.NotNil(t, h)
 	require.NotNil(t, h.mgr)
+	assert.Equal(t, "8080", h.port)
 }
 
 func TestHandler_ServeMux_Routing(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 	server := httptest.NewServer(h.ServeMux())
 	defer server.Close()
 
@@ -161,7 +165,7 @@ func TestHandler_CreateSession(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	req := httptest.NewRequest("POST", "/sessions", nil)
 	rr := httptest.NewRecorder()
@@ -184,7 +188,7 @@ func TestHandler_CreateSession_StoreError(t *testing.T) {
 	store := &errStore{}
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	req := httptest.NewRequest("POST", "/sessions", nil)
 	rr := httptest.NewRecorder()
@@ -197,7 +201,7 @@ func TestHandler_CreateSession_AttachExisting(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	// Create a thread directly in the store.
 	thr, err := store.Create()
@@ -220,7 +224,7 @@ func TestHandler_CreateSession_AttachNotFound(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	body := `{"thread_id": "nonexistent"}`
 	req := httptest.NewRequest("POST", "/sessions", strings.NewReader(body))
@@ -234,7 +238,7 @@ func TestHandler_CreateSession_MalformedJSON(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	body := `{"thread_id": "`
 	req := httptest.NewRequest("POST", "/sessions", strings.NewReader(body))
@@ -248,7 +252,7 @@ func TestHandler_DeleteSession(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	// Create a session first.
 	createReq := httptest.NewRequest("POST", "/sessions", nil)
@@ -281,7 +285,7 @@ func TestHandler_DeleteSession_NotFound(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	req := httptest.NewRequest("DELETE", "/sessions/nonexistent", nil)
 	rr := httptest.NewRecorder()
@@ -299,7 +303,7 @@ func TestHandler_SendMessage(t *testing.T) {
 	}
 	store := thread.NewMemoryStore()
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	// Create a session.
 	createReq := httptest.NewRequest("POST", "/sessions", nil)
@@ -347,7 +351,7 @@ func TestHandler_SendMessage_NotFound(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	body := `{"content": "hi"}`
 	req := httptest.NewRequest("POST", "/sessions/nonexistent/messages", strings.NewReader(body))
@@ -365,7 +369,7 @@ func TestHandler_SendMessage_NoKinds(t *testing.T) {
 	}
 	store := thread.NewMemoryStore()
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	// Create a session.
 	createReq := httptest.NewRequest("POST", "/sessions", nil)
@@ -407,7 +411,7 @@ func TestHandler_SendMessage_NoKinds(t *testing.T) {
 func TestHandler_SendMessage_Concurrent(t *testing.T) {
 	store := thread.NewMemoryStore()
 	mgr := session.NewManager(store, &blockingProvider{}, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	// Create a session.
 	createReq := httptest.NewRequest("POST", "/sessions", nil)
@@ -447,7 +451,7 @@ func TestHandler_SendMessage_MalformedJSON(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	// Create a session.
 	createReq := httptest.NewRequest("POST", "/sessions", nil)
@@ -472,7 +476,7 @@ func TestHandler_SendMessage_EmptyBody(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	// Create a session.
 	createReq := httptest.NewRequest("POST", "/sessions", nil)
@@ -501,7 +505,7 @@ func TestHandler_SendMessage_ProviderError(t *testing.T) {
 	}
 	store := thread.NewMemoryStore()
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	// Create a session.
 	createReq := httptest.NewRequest("POST", "/sessions", nil)
@@ -536,7 +540,7 @@ func TestHandler_SendMessage_SaveError(t *testing.T) {
 		},
 	}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	// Create a session.
 	createReq := httptest.NewRequest("POST", "/sessions", nil)
@@ -566,7 +570,7 @@ func TestHandler_SendMessage_HandlerError(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, boomProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	// Create a session.
 	createReq := httptest.NewRequest("POST", "/sessions", nil)
@@ -608,7 +612,7 @@ func TestHandler_SessionEvents_NotFound(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	req := httptest.NewRequest("GET", "/sessions/nonexistent/events", nil)
 	rr := httptest.NewRecorder()
@@ -621,7 +625,7 @@ func TestHandler_SessionEvents_ContextCancel(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	// Create a session.
 	createReq := httptest.NewRequest("POST", "/sessions", nil)
@@ -651,7 +655,7 @@ func TestHandler_ListThreads(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	// Create a session (which also creates a thread).
 	createReq := httptest.NewRequest("POST", "/sessions", nil)
@@ -679,7 +683,7 @@ func TestHandler_ListThreads_Empty(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	req := httptest.NewRequest("GET", "/threads", nil)
 	rr := httptest.NewRecorder()
@@ -697,7 +701,7 @@ func TestHandler_ListThreads_StoreError(t *testing.T) {
 	store := &listErrStore{}
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	req := httptest.NewRequest("GET", "/threads", nil)
 	rr := httptest.NewRecorder()
@@ -728,7 +732,7 @@ func TestHandler_ServeMux_UnknownPaths(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	tests := []struct {
 		name       string
@@ -754,7 +758,7 @@ func TestHandler_WithUI_StaticFiles(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr, WithUI())
+	h := New(mgr, WithUI())
 
 	t.Run("GET / returns text/html", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/", nil)
@@ -786,7 +790,7 @@ func TestHandler_WithUI_StaticFiles_ErrorPath(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr, WithUI())
+	h := New(mgr, WithUI())
 
 	// Swap staticFS with a mock that always errors.
 	oldFS := staticFS
@@ -815,7 +819,7 @@ func TestHandler_WithoutUI_Root404(t *testing.T) {
 	store := thread.NewMemoryStore()
 	prov := &mockProvider{}
 	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
-	h := NewHandler(mgr)
+	h := New(mgr)
 
 	req := httptest.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
