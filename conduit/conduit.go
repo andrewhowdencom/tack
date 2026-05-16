@@ -5,6 +5,8 @@
 // mechanism.
 package conduit
 
+import "context"
+
 // Capability is a well-known conduit capability.
 type Capability string
 
@@ -36,4 +38,9 @@ type Descriptor struct {
 	Description string
 	// Capabilities lists the well-known capabilities this conduit supports.
 	Capabilities []Capability
+}
+
+// Conduit is a runnable frontend that connects to a session manager.
+type Conduit interface {
+	Run(ctx context.Context) error
 }
