@@ -57,6 +57,7 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/andrewhowdencom/ore/agent"
 	"github.com/andrewhowdencom/ore/cognitive"
 	"github.com/andrewhowdencom/ore/conduit/http"
 	"github.com/andrewhowdencom/ore/loop"
@@ -169,14 +170,15 @@ func run() error {
 	// Create the session manager with the ReAct cognitive pattern.
 	mgr := session.NewManager(threadStore, prov, stepFactory, cognitive.NewTurnProcessor())
 
-	// Create the HTTP conduit.
+	// Create the agent and register the HTTP conduit.
 	// WithUI() is optional; omit it to serve only the API without the chat UI.
-	h := http.New(mgr, http.WithPort(port), http.WithUI())
+	a := agent.New(mgr)
+	a.Add(http.New(mgr, http.WithPort(port), http.WithUI()))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	return h.Run(ctx)
+	return a.Run(ctx)
 }
 
 // toFloat64 converts a JSON-decoded number (or string) to float64.

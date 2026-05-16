@@ -24,6 +24,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/andrewhowdencom/ore/agent"
 	"github.com/andrewhowdencom/ore/cognitive"
 	"github.com/andrewhowdencom/ore/conduit/tui"
 	"github.com/andrewhowdencom/ore/loop"
@@ -83,18 +84,15 @@ func run() error {
 	// Create session manager with the ReAct cognitive pattern.
 	mgr := session.NewManager(store, prov, stepFactory, cognitive.NewTurnProcessor())
 
-	// Create TUI conduit composed with the manager.
+	// Create the agent and register the TUI conduit.
 	// WithThreadID is optional; omit it to create a new thread.
-	s := tui.New(mgr, tui.WithThreadID(os.Getenv("ORE_THREAD_ID")))
+	a := agent.New(mgr)
+	a.Add(tui.New(mgr, tui.WithThreadID(os.Getenv("ORE_THREAD_ID"))))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Run the TUI. This blocks until the user quits (Ctrl+C) or the context
+	// Run the agent. This blocks until the user quits (Ctrl+C) or the context
 	// is cancelled.
-	if err := s.Run(ctx); err != nil {
-		return fmt.Errorf("tui exited: %w", err)
-	}
-
-	return nil
+	return a.Run(ctx)
 }
