@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -97,4 +98,59 @@ func TestAgent_Run_ErrorPropagates(t *testing.T) {
 
 	err := a.Run(ctx)
 	assert.EqualError(t, err, "boom")
+}
+
+// immediateErrorConduit returns an error immediately without waiting.
+type immediateErrorConduit struct {
+	err error
+}
+
+func (i *immediateErrorConduit) Run(ctx context.Context) error {
+	return i.err
+}
+
+// cancellationObserverConduit blocks until the context is cancelled and
+// records whether it observed the cancellation.
+type cancellationObserverConduit struct {
+	observed *atomic.Bool
+}
+
+func (c *cancellationObserverConduit) Run(ctx context.Context) error {
+	<-ctx.Done()
+	c.observed.Store(true)
+	return ctx.Err()
+}
+
+func TestAgent_Run_CancellationPropagation(t *testing.T) {
+	var observed atomic.Bool
+
+	quickErr := &immediateErrorConduit{err: errors.New("quick error")}
+	observer := &cancellationObserverConduit{observed: &observed}
+
+	a := New(nil)
+	a.Add(quickErr)
+	a.Add(observer)
+
+	err := a.Run(context.Background())
+	require.Error(t, err)
+	assert.Equal(t, "quick error", err.Error())
+	assert.True(t, observed.Load(), "observer conduit should have observed context cancellation")
+}
+
+func TestAgent_Run_ConcurrentTiming(t *testing.T) {
+	start := time.Now()
+
+	slow := &mockConduit{block: 200 * time.Millisecond}
+	fast := &mockConduit{block: 100 * time.Millisecond}
+
+	a := New(nil)
+	a.Add(slow)
+	a.Add(fast)
+
+	err := a.Run(context.Background())
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	assert.Less(t, elapsed, 250*time.Millisecond, "conduits should run concurrently, not serially")
+	assert.GreaterOrEqual(t, elapsed, 190*time.Millisecond, "should wait for slowest conduit")
 }

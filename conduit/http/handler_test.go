@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -826,3 +827,65 @@ func TestHandler_WithoutUI_Root404(t *testing.T) {
 	h.ServeMux().ServeHTTP(rr, req)
 	assert.Equal(t, 404, rr.Code)
 }
+
+// getFreePort asks the OS for an available TCP port.
+func getFreePort() (string, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", err
+	}
+	defer l.Close()
+	_, portStr, err := net.SplitHostPort(l.Addr().String())
+	return portStr, err
+}
+
+func TestWithPort(t *testing.T) {
+	store := thread.NewMemoryStore()
+	prov := &mockProvider{}
+	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
+	h := New(mgr, WithPort("9090"))
+	assert.Equal(t, "9090", h.port)
+}
+
+func TestHandler_Run_StartAndShutdown(t *testing.T) {
+	port, err := getFreePort()
+	require.NoError(t, err)
+
+	store := thread.NewMemoryStore()
+	prov := &mockProvider{}
+	mgr := session.NewManager(store, prov, func() *loop.Step { return loop.New() }, simpleProcessor())
+	h := New(mgr, WithPort(port))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- h.Run(ctx)
+	}()
+
+	// Poll until the server is ready.
+	var resp *http.Response
+	for i := 0; i < 50; i++ {
+		resp, err = http.Get("http://127.0.0.1:" + port + "/threads")
+		if err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	require.NoError(t, err, "server should be reachable")
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	// Graceful shutdown.
+	cancel()
+
+	select {
+	case err := <-errCh:
+		assert.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return after context cancellation")
+	}
+}
+
+
